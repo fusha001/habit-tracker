@@ -3298,7 +3298,7 @@
 
             /** 加入房间 */
             document.getElementById('btnJoinRoom').addEventListener('click', async () => {
-                if (!supabase) {
+                if (!supabaseClient) {
                     const url = document.getElementById('inputSupabaseUrl').value.trim();
                     const key = document.getElementById('inputSupabaseKey').value.trim();
                     if (!url || !key) { showToast('请先填写 Supabase URL 和 Key 并点击状态文字连接'); return; }
@@ -4903,15 +4903,16 @@
 
             // ==================== ☁️ Supabase 实时同步 ====================
 
-            let supabase = null;
+            let supabaseClient = null;
             let syncChannel = null;
             let syncRoomCode = null;
 
             /** 初始化 Supabase 连接 */
             function connectSupabase(url, key) {
                 if (!url || !key) { showToast('请填写 Supabase URL 和 Key'); return; }
+                if (typeof window.supabase === 'undefined') { showToast('⚠️ Supabase SDK 加载失败，请检查网络'); return; }
                 try {
-                    supabase = supabase.createClient(url, key);
+                    supabaseClient = window.supabase.createClient(url, key);
                     showToast('✅ Supabase 已连接！');
                     document.getElementById('syncStatus').textContent = '✅ 已连接';
                     document.getElementById('syncStatus').style.color = '#66bb6a';
@@ -4926,7 +4927,7 @@
 
             /** 加入房间 */
             async function joinRoom(code) {
-                if (!supabase) { showToast('请先连接 Supabase'); return; }
+                if (!supabaseClient) { showToast('请先连接 Supabase'); return; }
                 if (!code.trim()) { showToast('请输入房间码'); return; }
                 syncRoomCode = code.trim();
                 document.getElementById('syncStatus').textContent = `🏠 房间: ${syncRoomCode}`;
@@ -4942,7 +4943,7 @@
 
             /** 推送我的数据到 Supabase */
             async function pushMyData() {
-                if (!supabase || !syncRoomCode) return;
+                if (!supabaseClient || !syncRoomCode) return;
                 const myCard = {
                     room_code: syncRoomCode,
                     user_name: appData.myName || '我',
@@ -4954,7 +4955,7 @@
                     updated_at: new Date().toISOString(),
                 };
                 try {
-                    await supabase.from('habit_friends').upsert(myCard, { onConflict: 'room_code,user_name' });
+                    await supabaseClient.from('habit_friends').upsert(myCard, { onConflict: 'room_code,user_name' });
                 } catch (e) {
                     console.warn('推送失败', e);
                 }
@@ -4962,10 +4963,10 @@
 
             /** 订阅房间内好友的实时更新 */
             function subscribeToRoom() {
-                if (!supabase || !syncRoomCode) return;
-                if (syncChannel) supabase.removeChannel(syncChannel);
+                if (!supabaseClient || !syncRoomCode) return;
+                if (syncChannel) supabaseClient.removeChannel(syncChannel);
 
-                syncChannel = supabase
+                syncChannel = supabaseClient
                     .channel('room_' + syncRoomCode)
                     .on('postgres_changes',
                         { event: '*', schema: 'public', table: 'habit_friends', filter: `room_code=eq.${syncRoomCode}` },
@@ -5007,9 +5008,9 @@
 
             /** 首次加载房间内所有好友数据 */
             async function loadRoomFriends() {
-                if (!supabase || !syncRoomCode) return;
+                if (!supabaseClient || !syncRoomCode) return;
                 try {
-                    const { data, error } = await supabase
+                    const { data, error } = await supabaseClient
                         .from('habit_friends')
                         .select('*')
                         .eq('room_code', syncRoomCode);
