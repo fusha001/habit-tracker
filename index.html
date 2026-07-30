@@ -14,19 +14,14 @@
         tailwind.config = {
             theme: {
                 extend: {
-                    // 圆润字体栈：优先使用 Nunito，回退到系统圆体
+                    // 圆润字体栈：优先系统原生字体，无需 Google Fonts
                     fontFamily: {
-                        'round': ['Nunito', 'PingFang SC', 'Noto Sans SC', 'sans-serif'],
+                        'round': ['PingFang SC', 'HarmonyOS Sans SC', 'Noto Sans SC', 'MiSans', 'sans-serif'],
                     },
                 }
             }
         }
     </script>
-
-    <!-- Google Fonts：加载 Nunito 圆体字（支持离线缓存） -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 
     <!-- ==================== 自定义样式 ==================== -->
     <style>
