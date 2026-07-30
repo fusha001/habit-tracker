@@ -9,6 +9,10 @@
     <script src="https://cdn.tailwindcss.com">
     </script>
 
+    <!-- Supabase SDK：实时数据库同步 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+    </script>
+
     <!-- 自定义 Tailwind 主题配置 -->
     <script>
         tailwind.config = {
@@ -943,6 +947,21 @@
         <button id="btnOpenAnniversary" class="btn-tap w-full py-3 rounded-2xl font-extrabold text-base text-pink-500 bg-pink-50 mb-3">
             💝 管理纪念日
         </button>
+        <!-- Supabase 实时同步配置 -->
+        <div class="border-t border-purple-100 pt-3 mt-3 mb-3">
+            <p class="text-xs font-bold text-purple-500 mb-2">☁️ 实时同步（Supabase 免费）</p>
+            <input id="inputSupabaseUrl" type="text" placeholder="Supabase URL"
+            class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
+            <input id="inputSupabaseKey" type="text" placeholder="anon public key"
+            class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
+            <div class="flex gap-2 mb-1.5">
+                <input id="inputRoomCode" type="text" placeholder="房间码（好友共用）" maxlength="20"
+                class="flex-1 bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none">
+                <button id="btnJoinRoom" class="btn-tap px-4 py-2 rounded-xl text-xs font-extrabold text-white flex-shrink-0"
+                style="background:linear-gradient(135deg,#66bb6a,#43a047);">加入</button>
+            </div>
+            <p id="syncStatus" class="text-xs text-purple-300 font-semibold text-center">未连接</p>
+        </div>
         <!-- 补签卡说明 -->
         <div class="text-xs text-purple-400 text-center mt-1 font-semibold">
             💡 每连续打卡30天奖励1张补签卡<br>补签卡可填补遗漏的打卡日期
@@ -1249,6 +1268,11 @@
                 anniversaries: [],          // 纪念日 [{id, name, date:'MM-DD', icon, type}]
                 todos: [],                  // 待办 [{id, text, date:'YYYY-MM-DD', done:false}]
                 friends: [],               // 好友 [{id, name, color, habits:[{name,color,checkins}]}]
+                supabaseUrl: '',           // Supabase 连接配置
+                supabaseKey: '',
+                syncRoomCode: '',
+                myName: '',
+                myColor: '',
             };
 
             /** 心情 emoji 选项列表（用于每日心情快速选择） */
@@ -1560,6 +1584,11 @@
                         appData.anniversaries = parsed.anniversaries || [];
                         appData.todos = parsed.todos || [];
                         appData.friends = parsed.friends || [];
+                        appData.supabaseUrl = parsed.supabaseUrl || '';
+                        appData.supabaseKey = parsed.supabaseKey || '';
+                        appData.syncRoomCode = parsed.syncRoomCode || '';
+                        appData.myName = parsed.myName || '';
+                        appData.myColor = parsed.myColor || '';
                         // 迁移旧数据：确保每个习惯都有所有必要字段
                         let migrated = false;
                         appData.habits.forEach((h, i) => {
@@ -1601,6 +1630,11 @@
                         anniversaries: appData.anniversaries,
                         todos: appData.todos,
                         friends: appData.friends,
+                        supabaseUrl: appData.supabaseUrl,
+                        supabaseKey: appData.supabaseKey,
+                        syncRoomCode: appData.syncRoomCode,
+                        myName: appData.myName,
+                        myColor: appData.myColor,
                     };
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
                 } catch (e) {
@@ -2187,6 +2221,8 @@
                     // 播放打卡音效
                     playCheckinSound();
                     saveData();
+                    // 推送到 Supabase 实时同步
+                    if (syncRoomCode) setTimeout(() => pushMyData(), 100);
                     // 触发彩蛋（延迟执行不阻塞UI）
                     setTimeout(() => triggerEasterEggs(habit), 300);
                     return { action: 'checked', badge: newBadge };
@@ -3250,6 +3286,51 @@
                 document.getElementById('modalAnniversary').classList.remove('hidden');
                 domSettingsPanel.classList.remove('open');
             });
+
+            // ==================== ☁️ Supabase 实时同步事件 ====================
+
+            /** 连接 Supabase */
+            document.getElementById('syncStatus').addEventListener('click', () => {
+                const url = document.getElementById('inputSupabaseUrl').value.trim();
+                const key = document.getElementById('inputSupabaseKey').value.trim();
+                if (url && key) connectSupabase(url, key);
+            });
+
+            /** 加入房间 */
+            document.getElementById('btnJoinRoom').addEventListener('click', async () => {
+                if (!supabase) {
+                    const url = document.getElementById('inputSupabaseUrl').value.trim();
+                    const key = document.getElementById('inputSupabaseKey').value.trim();
+                    if (!url || !key) { showToast('请先填写 Supabase URL 和 Key 并点击状态文字连接'); return; }
+                    connectSupabase(url, key);
+                    await new Promise(r => setTimeout(r, 500));
+                }
+                if (!appData.myName) setMyInfo();
+                const code = document.getElementById('inputRoomCode').value.trim();
+                if (code) {
+                    await joinRoom(code);
+                    await loadRoomFriends();
+                    if (appData.viewMode === 'friends') renderAll();
+                }
+            });
+
+            /** 自动回填已保存的配置 */
+            if (appData.supabaseUrl) document.getElementById('inputSupabaseUrl').value = appData.supabaseUrl;
+            if (appData.supabaseKey) document.getElementById('inputSupabaseKey').value = appData.supabaseKey;
+            if (appData.syncRoomCode) document.getElementById('inputRoomCode').value = appData.syncRoomCode;
+
+            // 自动连接（如果有保存的配置）
+            setTimeout(() => {
+                if (appData.supabaseUrl && appData.supabaseKey) {
+                    connectSupabase(appData.supabaseUrl, appData.supabaseKey);
+                    if (appData.syncRoomCode) {
+                        setTimeout(async () => {
+                            await joinRoom(appData.syncRoomCode);
+                            await loadRoomFriends();
+                        }, 1500);
+                    }
+                }
+            }, 2000);
 
             /** 纪念日弹窗：关闭 */
             document.getElementById('btnCloseAnniversary').addEventListener('click', () => {
@@ -4819,6 +4900,141 @@
 
                 return wrapper;
             };
+
+            // ==================== ☁️ Supabase 实时同步 ====================
+
+            let supabase = null;
+            let syncChannel = null;
+            let syncRoomCode = null;
+
+            /** 初始化 Supabase 连接 */
+            function connectSupabase(url, key) {
+                if (!url || !key) { showToast('请填写 Supabase URL 和 Key'); return; }
+                try {
+                    supabase = supabase.createClient(url, key);
+                    showToast('✅ Supabase 已连接！');
+                    document.getElementById('syncStatus').textContent = '✅ 已连接';
+                    document.getElementById('syncStatus').style.color = '#66bb6a';
+                    // 保存配置
+                    appData.supabaseUrl = url;
+                    appData.supabaseKey = key;
+                    saveData();
+                } catch (e) {
+                    showToast('⚠️ 连接失败，请检查配置');
+                }
+            }
+
+            /** 加入房间 */
+            async function joinRoom(code) {
+                if (!supabase) { showToast('请先连接 Supabase'); return; }
+                if (!code.trim()) { showToast('请输入房间码'); return; }
+                syncRoomCode = code.trim();
+                document.getElementById('syncStatus').textContent = `🏠 房间: ${syncRoomCode}`;
+                document.getElementById('syncStatus').style.color = '#7e57c2';
+                appData.syncRoomCode = syncRoomCode;
+                // 推送当前数据
+                await pushMyData();
+                // 订阅房间变化
+                subscribeToRoom();
+                saveData();
+                showToast(`🏠 已加入房间「${syncRoomCode}」！`);
+            }
+
+            /** 推送我的数据到 Supabase */
+            async function pushMyData() {
+                if (!supabase || !syncRoomCode) return;
+                const myCard = {
+                    room_code: syncRoomCode,
+                    user_name: appData.myName || '我',
+                    user_color: appData.myColor || '#ce93d8',
+                    habits_data: appData.habits.map(h => ({
+                        name: h.name, color: h.color, checkins: h.checkins,
+                        badges: h.badges, diaries: h.diaries,
+                    })),
+                    updated_at: new Date().toISOString(),
+                };
+                try {
+                    await supabase.from('habit_friends').upsert(myCard, { onConflict: 'room_code,user_name' });
+                } catch (e) {
+                    console.warn('推送失败', e);
+                }
+            }
+
+            /** 订阅房间内好友的实时更新 */
+            function subscribeToRoom() {
+                if (!supabase || !syncRoomCode) return;
+                if (syncChannel) supabase.removeChannel(syncChannel);
+
+                syncChannel = supabase
+                    .channel('room_' + syncRoomCode)
+                    .on('postgres_changes',
+                        { event: '*', schema: 'public', table: 'habit_friends', filter: `room_code=eq.${syncRoomCode}` },
+                        (payload) => {
+                            if (payload.new && payload.new.user_name !== (appData.myName || '我')) {
+                                // 收到好友数据更新
+                                updateFriendFromSync(payload.new);
+                            }
+                        }
+                    )
+                    .subscribe();
+                document.getElementById('syncStatus').textContent = `🟢 实时同步中 · 房间: ${syncRoomCode}`;
+                document.getElementById('syncStatus').style.color = '#66bb6a';
+            }
+
+            /** 从同步数据更新好友 */
+            function updateFriendFromSync(data) {
+                if (!data || !data.user_name) return;
+                const existing = (appData.friends || []).findIndex(f => f.name === data.user_name);
+                const friend = {
+                    id: data.user_name,
+                    name: data.user_name,
+                    color: data.user_color,
+                    updatedAt: new Date(data.updated_at).getTime(),
+                    habits: (data.habits_data || []).map(h => ({
+                        name: h.name, color: h.color, checkins: h.checkins || [],
+                        badges: h.badges || [],
+                    })),
+                    live: true, // 标记为实时好友
+                };
+                if (existing >= 0) {
+                    appData.friends[existing] = friend;
+                } else {
+                    appData.friends.push(friend);
+                }
+                saveData();
+                if (appData.viewMode === 'friends') renderAll();
+            }
+
+            /** 首次加载房间内所有好友数据 */
+            async function loadRoomFriends() {
+                if (!supabase || !syncRoomCode) return;
+                try {
+                    const { data, error } = await supabase
+                        .from('habit_friends')
+                        .select('*')
+                        .eq('room_code', syncRoomCode);
+                    if (data) {
+                        data.forEach(d => {
+                            if (d.user_name !== (appData.myName || '我')) {
+                                updateFriendFromSync(d);
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.warn('加载好友失败', e);
+                }
+            }
+
+            /** 设置我的显示信息 */
+            function setMyInfo() {
+                const name = prompt('你的昵称（好友可见）：', appData.myName || '我');
+                if (name) {
+                    appData.myName = name.trim() || '我';
+                    appData.myColor = MACARON_COLORS[Math.floor(Math.random() * MACARON_COLORS.length)].value;
+                    saveData();
+                    if (syncRoomCode) pushMyData();
+                }
+            }
 
             // ==================== 👥 好友系统 ====================
 
