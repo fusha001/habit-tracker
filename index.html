@@ -812,6 +812,20 @@
             border-radius: 14px; border: none; font-size: 14px; font-weight: 700;
             cursor: pointer; background: #f0f0f0; color: #999;
         }
+
+        /* ====== 👥 好友系统样式 ====== */
+        .friend-card {
+            background: rgba(255,255,255,0.8); border-radius: 18px; padding: 14px;
+            box-shadow: 0 2px 12px rgba(149,117,205,0.08);
+            transition: transform 0.15s ease;
+        }
+        .friend-card:active { transform: scale(0.98); }
+        .friend-habit-row {
+            display: flex; align-items: center; gap: 8px; padding: 4px 0;
+        }
+        .friend-streak-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+        }
     </style>
 </head>
 <body class="font-round">
@@ -849,6 +863,7 @@
                 <button data-view="week">📆 周</button>
                 <button data-view="year">🔥 年</button>
                 <button data-view="festival">🗓 日历</button>
+                <button data-view="friends">👥 好友</button>
             </div>
             <button id="btnSettings" class="btn-tap w-10 h-10 flex items-center justify-center rounded-full bg-white/70 text-purple-400 text-lg" title="设置">
                 ⚙️
@@ -1233,6 +1248,7 @@
                 customGroups: [],           // 自定义分组 [{label, value}]
                 anniversaries: [],          // 纪念日 [{id, name, date:'MM-DD', icon, type}]
                 todos: [],                  // 待办 [{id, text, date:'YYYY-MM-DD', done:false}]
+                friends: [],               // 好友 [{id, name, color, habits:[{name,color,checkins}]}]
             };
 
             /** 心情 emoji 选项列表（用于每日心情快速选择） */
@@ -1543,6 +1559,7 @@
                         appData.customGroups = parsed.customGroups || [];
                         appData.anniversaries = parsed.anniversaries || [];
                         appData.todos = parsed.todos || [];
+                        appData.friends = parsed.friends || [];
                         // 迁移旧数据：确保每个习惯都有所有必要字段
                         let migrated = false;
                         appData.habits.forEach((h, i) => {
@@ -1583,6 +1600,7 @@
                         customGroups: appData.customGroups,
                         anniversaries: appData.anniversaries,
                         todos: appData.todos,
+                        friends: appData.friends,
                     };
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
                 } catch (e) {
@@ -1836,6 +1854,7 @@
                         appData.customGroups = data.customGroups || [];
                         appData.anniversaries = data.anniversaries || [];
                         appData.todos = data.todos || [];
+                        appData.friends = data.friends || [];
                         appData.gachaCoins = data.gachaCoins || 0;
                         appData.inventory = data.inventory || [];
                         appData.ownedThemes = data.ownedThemes || ['default'];
@@ -2213,14 +2232,17 @@
                 renderMonthLabel();
                 renderViewToggle();
                 // 日历模式：隐藏花园 + 分组筛选 + 习惯列表，显示独立日历
-                if (appData.viewMode === 'festival') {
+                if (appData.viewMode === 'festival' || appData.viewMode === 'friends') {
                     const gardenCard = document.getElementById('gardenArea').parentElement;
                     if (gardenCard) gardenCard.style.display = 'none';
                     document.getElementById('groupFilterBar').classList.add('hidden');
                     domHabitList.classList.add('hidden');
                     domEmptyState.classList.add('hidden');
-                    // 在习惯列表位置渲染独立日历
                     domHabitList.innerHTML = '';
+                    if (appData.viewMode === 'friends') {
+                        renderFriendView();
+                        domHabitList.classList.remove('hidden');
+                    } else {
                     try {
                         const calWrapper = document.createElement('div');
                         calWrapper.className = 'card px-4 py-3';
@@ -2246,6 +2268,12 @@
 
             /** 渲染月份/周/年标签文字 */
             function renderMonthLabel() {
+                if (appData.viewMode === 'friends') {
+                    domMonthLabel.textContent = '👥 好友动态';
+                    domBtnNext.style.opacity = '0.35';
+                    domBtnNext.style.pointerEvents = 'none';
+                    return;
+                }
                 const today = new Date();
                 let isMaxMonth = false;
 
@@ -4792,6 +4820,244 @@
                 return wrapper;
             };
 
+            // ==================== 👥 好友系统 ====================
+
+            /** 导出我的数据为好友卡片 */
+            function exportMyFriendCard() {
+                const name = prompt('请输入你的昵称（好友会看到）：', '我') || '我';
+                const card = {
+                    name: name,
+                    color: MACARON_COLORS[Math.floor(Math.random() * MACARON_COLORS.length)].value,
+                    updatedAt: Date.now(),
+                    habits: appData.habits.map(h => ({
+                        name: h.name,
+                        color: h.color,
+                        checkins: h.checkins,
+                    })),
+                };
+                const blob = new Blob([JSON.stringify(card, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `好友打卡_${name}_${formatDate(new Date())}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('📤 好友卡片已导出！发送给朋友吧～');
+            }
+
+            /** 生成分享链接（Base64编码嵌入URL） */
+            function generateFriendLink() {
+                const name = prompt('请输入你的昵称：', '我') || '我';
+                const card = {
+                    name: name,
+                    color: MACARON_COLORS[Math.floor(Math.random() * MACARON_COLORS.length)].value,
+                    updatedAt: Date.now(),
+                    habits: appData.habits.map(h => ({
+                        name: h.name,
+                        color: h.color,
+                        checkins: h.checkins,
+                    })),
+                };
+                const encoded = btoa(encodeURIComponent(JSON.stringify(card)));
+                const link = location.origin + location.pathname + '#friend=' + encoded;
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(link).then(() => {
+                        showToast('🔗 分享链接已复制！发给好友吧～');
+                    });
+                } else {
+                    prompt('复制以下链接分享给好友：', link);
+                }
+            }
+
+            /** 从URL hash中加载好友数据 */
+            function loadFriendFromHash() {
+                const hash = location.hash;
+                if (hash.startsWith('#friend=')) {
+                    try {
+                        const encoded = hash.slice(8);
+                        const card = JSON.parse(decodeURIComponent(atob(encoded)));
+                        if (!card.name || !card.habits) return;
+                        // 检查是否已存在同名好友，存在则更新
+                        const existingIdx = (appData.friends || []).findIndex(f => f.name === card.name);
+                        card.id = generateId(); // 始终使用新ID
+                        if (existingIdx >= 0) {
+                            appData.friends[existingIdx] = card;
+                            showToast(`🔄 已更新好友「${card.name}」的最新数据！`);
+                        } else {
+                            appData.friends.push(card);
+                            showToast(`👥 已添加好友「${card.name}」！`);
+                        }
+                        saveData();
+                        // 清除hash避免重复加载
+                        history.replaceState(null, '', location.pathname);
+                        renderAll();
+                    } catch (e) {
+                        console.warn('好友链接解析失败', e);
+                    }
+                }
+            }
+
+            /** 刷新指定好友数据（重新从文件导入） */
+            function refreshFriend() {
+                const input = document.createElement('input');
+                input.type = 'file'; input.accept = '.json';
+                input.addEventListener('change', (e) => {
+                    if (e.target.files[0]) {
+                        importFriendCard(e.target.files[0]);
+                        showToast('🔄 好友数据已更新！');
+                    }
+                });
+                input.click();
+            }
+
+            /** 导入好友卡片 */
+            function importFriendCard(file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const card = JSON.parse(e.target.result);
+                        if (!card.name || !card.habits) throw new Error('无效格式');
+                        card.id = generateId();
+                        card.color = card.color || '#ce93d8';
+                        appData.friends.push(card);
+                        saveData();
+                        showToast(`👥 已添加好友「${card.name}」！`);
+                        renderAll();
+                    } catch (err) {
+                        showToast('⚠️ 文件格式不正确');
+                    }
+                };
+                reader.readAsText(file);
+            }
+
+            /** 删除好友 */
+            function removeFriend(friendId) {
+                appData.friends = appData.friends.filter(f => f.id !== friendId);
+                saveData();
+                showToast('👋 好友已移除');
+                renderAll();
+            }
+
+            /** 渲染好友视图 */
+            function renderFriendView() {
+                domHabitList.innerHTML = '';
+
+                // ---- 操作栏 ----
+                const actionBar = document.createElement('div');
+                actionBar.className = 'flex gap-2 mb-3';
+                // 分享链接（复制到剪贴板）
+                const linkBtn = document.createElement('button');
+                linkBtn.className = 'btn-tap flex-1 py-3 rounded-2xl font-extrabold text-sm text-white';
+                linkBtn.style.background = 'linear-gradient(135deg, #ce93d8, #ab47bc)';
+                linkBtn.textContent = '🔗 复制分享链接';
+                linkBtn.addEventListener('click', generateFriendLink);
+
+                // 导出文件（下载）
+                const exportBtn = document.createElement('button');
+                exportBtn.className = 'btn-tap flex-1 py-3 rounded-2xl font-extrabold text-sm text-purple-600 bg-purple-50';
+                exportBtn.textContent = '📤 导出文件';
+                exportBtn.addEventListener('click', exportMyFriendCard);
+                const importLabel = document.createElement('label');
+                importLabel.className = 'btn-tap flex-1 py-3 rounded-2xl font-extrabold text-sm text-center text-purple-600 bg-purple-50 cursor-pointer';
+                importLabel.textContent = '📥 导入好友卡片';
+                const importInput = document.createElement('input');
+                importInput.type = 'file'; importInput.accept = '.json'; importInput.className = 'hidden';
+                importInput.addEventListener('change', (e) => {
+                    if (e.target.files[0]) { importFriendCard(e.target.files[0]);
+                        e.target.value = ''; }
+                });
+                importLabel.appendChild(importInput);
+                actionBar.appendChild(linkBtn);
+                const btnCol = document.createElement('div');
+                btnCol.className = 'flex flex-col gap-1.5 flex-1';
+                btnCol.appendChild(exportBtn);
+                btnCol.appendChild(importLabel);
+                actionBar.appendChild(btnCol);
+                domHabitList.appendChild(actionBar);
+
+                // ---- 好友列表 ----
+                if (!appData.friends || appData.friends.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'text-center py-12 text-purple-400 font-semibold text-sm';
+                    empty.innerHTML = '👥<br>还没有好友哦～<br><span class="text-xs text-purple-300">导出你的打卡数据分享给朋友<br>或导入朋友的打卡文件查看TA的进度</span>';
+                    domHabitList.appendChild(empty);
+                    return;
+                }
+
+                (appData.friends || []).forEach(friend => {
+                    const card = document.createElement('div');
+                    card.className = 'friend-card mb-3';
+
+                    // 好友头部
+                    const header = document.createElement('div');
+                    header.className = 'flex items-center justify-between mb-2';
+                    const nameArea = document.createElement('div');
+                    nameArea.className = 'flex items-center gap-2';
+                    const dot = document.createElement('span');
+                    dot.className = 'friend-streak-dot';
+                    dot.style.background = friend.color;
+                    const name = document.createElement('span');
+                    name.className = 'font-extrabold text-base text-purple-800';
+                    name.textContent = friend.name;
+                    const habitCount = document.createElement('span');
+                    habitCount.className = 'text-xs text-purple-400 font-semibold';
+                    habitCount.textContent = `${friend.habits.length}个习惯`;
+                    nameArea.appendChild(dot);
+                    nameArea.appendChild(name);
+                    nameArea.appendChild(habitCount);
+                    // 更新时间
+                    const updateTime = friend.updatedAt ? new Date(friend.updatedAt) : null;
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'text-xs text-purple-300 font-semibold';
+                    if (updateTime) {
+                        const diff = Math.floor((Date.now() - updateTime) / 3600000);
+                        timeSpan.textContent = diff < 1 ? '刚刚更新' : diff < 24 ? diff + '小时前' : Math.floor(diff/24) + '天前';
+                    }
+                    const refreshBtn = document.createElement('button');
+                    refreshBtn.className = 'btn-tap px-2 py-1 rounded-lg text-xs font-bold text-purple-500 bg-purple-50';
+                    refreshBtn.textContent = '🔄';
+                    refreshBtn.title = '刷新好友数据（重新导入文件）';
+                    refreshBtn.addEventListener('click', (e) => { e.stopPropagation(); refreshFriend(); });
+
+                    const btnGroup = document.createElement('div');
+                    btnGroup.className = 'flex items-center gap-1';
+                    btnGroup.appendChild(timeSpan);
+                    btnGroup.appendChild(refreshBtn);
+
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'btn-tap w-6 h-6 rounded-full bg-red-50 text-red-400 text-xs flex items-center justify-center';
+                    delBtn.textContent = '✕';
+                    delBtn.addEventListener('click', () => removeFriend(friend.id));
+                    btnGroup.appendChild(delBtn);
+                    header.appendChild(nameArea);
+                    header.appendChild(btnGroup);
+                    card.appendChild(header);
+
+                    // 好友习惯列表
+                    friend.habits.forEach(h => {
+                        const row = document.createElement('div');
+                        row.className = 'friend-habit-row';
+                        const hDot = document.createElement('span');
+                        hDot.className = 'friend-streak-dot';
+                        hDot.style.background = h.color;
+                        const hName = document.createElement('span');
+                        hName.className = 'text-sm font-semibold text-purple-700 flex-1';
+                        hName.textContent = h.name;
+                        const streak = calcStreak(h.checkins);
+                        const total = h.checkins ? h.checkins.length : 0;
+                        const stats = document.createElement('span');
+                        stats.className = 'text-xs font-bold text-purple-400';
+                        stats.textContent = `🔥${streak}天 · ✅${total}次`;
+                        row.appendChild(hDot);
+                        row.appendChild(hName);
+                        row.appendChild(stats);
+                        card.appendChild(row);
+                    });
+
+                    domHabitList.appendChild(card);
+                });
+            }
+
             // ==================== 📅 年月选择器 & 点击动画 ====================
 
             /** 打开年月选择器 */
@@ -4951,6 +5217,10 @@
                     appData.viewMonth = today.getMonth();
                 }
                 renderAll();
+                // 检查URL中是否有好友分享链接
+                if (location.hash.startsWith('#friend=')) {
+                    loadFriendFromHash();
+                }
                 initNotifications();
                 // 应用已保存的主题
                 if (appData.activeTheme && appData.activeTheme !== 'default') {
