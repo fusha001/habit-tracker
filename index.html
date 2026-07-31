@@ -9,8 +9,8 @@
     <script src="https://cdn.tailwindcss.com">
     </script>
 
-    <!-- Supabase SDK：实时数据库同步 -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+    <!-- LeanCloud SDK：实时数据库同步 -->
+    <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4/dist/av-min.js">
     </script>
 
     <!-- 自定义 Tailwind 主题配置 -->
@@ -947,7 +947,7 @@
         <button id="btnOpenAnniversary" class="btn-tap w-full py-3 rounded-2xl font-extrabold text-base text-pink-500 bg-pink-50 mb-3">
             💝 管理纪念日
         </button>
-        <!-- Supabase 实时同步配置 -->
+        <!-- LeanCloud 实时同步配置 -->
         <div class="border-t border-purple-100 pt-3 mt-3 mb-3">
             <div class="flex items-center justify-between mb-2">
                 <p class="text-xs font-bold text-purple-500">☁️ 实时同步</p>
@@ -955,16 +955,18 @@
             </div>
             <div class="bg-purple-50 rounded-xl p-2 mb-2 text-xs text-purple-400 leading-relaxed">
                 📌 <b>设置步骤</b>：<br>
-                1️⃣ <b>app.supabase.com</b> 邮箱注册<br>
+                1️⃣ <b>leancloud.cn</b> 邮箱注册<br>
                 2️⃣ 创建项目 → SQL Editor 粘贴建表语句<br>
                 3️⃣ Settings → API → 复制 URL 和 Key
             </div>
-            <input id="inputSupabaseUrl" type="text" placeholder="Project URL（https://xxx.supabase.co）"
+            <input id="inputLeanAppId" type="text" placeholder="AppID"
             class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
-            <input id="inputSupabaseKey" type="text" placeholder="anon public key"
+            <input id="inputLeanAppKey" type="text" placeholder="AppKey"
+<input id="inputLeanServer" type="text" placeholder="服务器地址（如 https://xxx.lc-cn-n1-shared.com）"
+            class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
             class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
             <div class="flex gap-2 mb-1.5">
-                <button id="btnConnectSupabase" class="btn-tap flex-1 py-2 rounded-xl text-xs font-extrabold text-white"
+                <button id="btnConnectLean" class="btn-tap flex-1 py-2 rounded-xl text-xs font-extrabold text-white"
                 style="background:linear-gradient(135deg,#7e57c2,#5e35b1);">🔌 连接测试</button>
             </div>
             <div class="flex gap-2">
@@ -1280,12 +1282,13 @@
                 anniversaries: [],          // 纪念日 [{id, name, date:'MM-DD', icon, type}]
                 todos: [],                  // 待办 [{id, text, date:'YYYY-MM-DD', done:false}]
                 friends: [],               // 好友 [{id, name, color, habits:[{name,color,checkins}]}]
-                supabaseUrl: '',           // Supabase 连接配置
-                supabaseKey: '',
+                leanAppId: '',           // LeanCloud AppID
+                leanAppKey: '',
                 syncRoomCode: '',
                 myName: '',
                 myColor: '',
-                deviceCode: '',            // 设备专属好友码
+                leanServer: '',             // LeanCloud server
+deviceCode: '',            // 设备专属好友码
             };
 
             /** 心情 emoji 选项列表（用于每日心情快速选择） */
@@ -1597,8 +1600,9 @@
                         appData.anniversaries = parsed.anniversaries || [];
                         appData.todos = parsed.todos || [];
                         appData.friends = parsed.friends || [];
-                        appData.supabaseUrl = parsed.supabaseUrl || '';
-                        appData.supabaseKey = parsed.supabaseKey || '';
+                        appData.leanAppId = parsed.leanAppId || '';
+                        appData.leanAppKey = parsed.leanAppKey || '';
+                        appData.leanServer = parsed.leanServer || '';
                         appData.syncRoomCode = parsed.syncRoomCode || '';
                         appData.myName = parsed.myName || '';
                         appData.myColor = parsed.myColor || '';
@@ -1645,8 +1649,9 @@
                         anniversaries: appData.anniversaries,
                         todos: appData.todos,
                         friends: appData.friends,
-                        supabaseUrl: appData.supabaseUrl,
-                        supabaseKey: appData.supabaseKey,
+                        leanAppId: appData.leanAppId,
+                        leanAppKey: appData.leanAppKey,
+                        leanServer: appData.leanServer,
                         syncRoomCode: appData.syncRoomCode,
                         myName: appData.myName,
                         myColor: appData.myColor,
@@ -2238,7 +2243,7 @@
                     // 播放打卡音效
                     playCheckinSound();
                     saveData();
-                    // 推送到 Supabase 实时同步
+                    // 推送到 LeanCloud 实时同步
                     if (syncRoomCode) setTimeout(() => pushMyData(), 100);
                     // 触发彩蛋（延迟执行不阻塞UI）
                     setTimeout(() => triggerEasterEggs(habit), 300);
@@ -3305,16 +3310,14 @@
                 domSettingsPanel.classList.remove('open');
             });
 
-            // ==================== ☁️ Supabase 实时同步事件 ====================
+            // ==================== LeanCloud 实时同步事件 ====================
 
-            /** 连接测试 */
-            document.getElementById('btnConnectSupabase').addEventListener('click', testSupabaseConnection);
+            document.getElementById('btnConnectLean').addEventListener('click', testLeanConnection);
 
-            /** 加入房间 */
             document.getElementById('btnJoinRoom').addEventListener('click', async () => {
-                if (!supabaseClient) {
-                    await testSupabaseConnection();
-                    if (!supabaseClient) return;
+                if (typeof AV === 'undefined') {
+                    await testLeanConnection();
+                    if (typeof AV === 'undefined') return;
                 }
                 if (!appData.myName) setMyInfo();
                 const code = document.getElementById('inputRoomCode').value.trim();
@@ -3324,15 +3327,29 @@
                 if (appData.viewMode === 'friends') renderAll();
             });
 
-            /** 自动回填已保存的配置 */
-            if (appData.supabaseUrl) document.getElementById('inputSupabaseUrl').value = appData.supabaseUrl;
-            if (appData.supabaseKey) document.getElementById('inputSupabaseKey').value = appData.supabaseKey;
+            if (appData.leanAppId) document.getElementById('inputLeanAppId').value = appData.leanAppId;
+            if (appData.leanAppKey) document.getElementById('inputLeanAppKey').value = appData.leanAppKey;
+            if (appData.leanServer) document.getElementById('inputLeanServer').value = appData.leanServer;
             if (appData.syncRoomCode) document.getElementById('inputRoomCode').value = appData.syncRoomCode;
+
+            setTimeout(() => {
+                if (appData.leanAppId && appData.leanAppKey) {
+                    connectLeanCloud(appData.leanAppId, appData.leanAppKey, appData.leanServer);
+                    if (appData.syncRoomCode) {
+                        setTimeout(async () => {
+                            await joinRoom(appData.syncRoomCode);
+                            await loadRoomFriends();
+                        }, 1500);
+                    }
+                }
+            }, 2000);
+
+
 
             // 自动连接（如果有保存的配置）
             setTimeout(() => {
-                if (appData.supabaseUrl && appData.supabaseKey) {
-                    connectSupabase(appData.supabaseUrl, appData.supabaseKey);
+                if (appData.leanAppId && appData.leanAppKey) {
+                    connectLeanCloud(appData.leanAppId, appData.leanAppKey, appData.leanServer);
                     if (appData.syncRoomCode) {
                         setTimeout(async () => {
                             await joinRoom(appData.syncRoomCode);
@@ -4911,171 +4928,117 @@
                 return wrapper;
             };
 
-            // ==================== ☁️ Supabase 实时同步 ====================
+            // ==================== LeanCloud 实时同步（国内版）====================
 
-            let supabaseClient = null;
-            let syncChannel = null;
             let syncRoomCode = null;
+            let liveQuery = null;
 
-            /** 初始化 Supabase 连接 */
-            function connectSupabase(url, key) {
-                if (!url || !key) { showToast('请填写 Supabase URL 和 Key'); return; }
-                if (typeof window.supabase === 'undefined') { showToast('⚠️ SDK 加载失败，请检查网络'); return; }
+            function connectLeanCloud(appId, appKey, server) {
+                if (!appId || !appKey) { showToast('请填写 AppID 和 AppKey'); return null; }
+                if (typeof AV === 'undefined') { showToast('SDK 加载失败'); return null; }
                 try {
-                    supabaseClient = window.supabase.createClient(url, key);
-                    appData.supabaseUrl = url;
-                    appData.supabaseKey = key;
+                    AV.init({ appId, appKey, serverURL: server || undefined });
+                    appData.leanAppId = appId;
+                    appData.leanAppKey = appKey;
+                    appData.leanServer = server;
                     saveData();
-                    return supabaseClient;
-                } catch (e) {
-                    showToast('⚠️ 连接失败，请检查 URL 和 Key');
-                    return null;
-                }
+                    return true;
+                } catch (e) { showToast('初始化失败'); return null; }
             }
 
-            /** 测试 Supabase 连接 */
-            async function testSupabaseConnection() {
-                const url = document.getElementById('inputSupabaseUrl').value.trim();
-                const key = document.getElementById('inputSupabaseKey').value.trim();
-                const statusEl = document.getElementById('syncStatus');
-
-                statusEl.textContent = '🟡 连接中...';
-                statusEl.style.color = '#ff9800';
-
-                const client = connectSupabase(url, key);
-                if (!client) {
-                    statusEl.textContent = '🔴 连接失败';
-                    statusEl.style.color = '#ef5350';
-                    return;
-                }
-
-                try {
-                    // 测试读取
-                    const { error } = await client.from('habit_friends').select('id').limit(1);
-                    if (error && error.code !== 'PGRST116') {
-                        throw error;
-                    }
-                    statusEl.textContent = '🟢 已连接';
-                    statusEl.style.color = '#66bb6a';
-                    showToast('✅ Supabase 连接成功！');
-                } catch (e) {
-                    statusEl.textContent = '🟠 已连接，需建表';
-                    statusEl.style.color = '#ff9800';
-                    showToast('⚠️ 已连接，请在 Supabase SQL Editor 中执行建表语句');
-                }
+            async function testLeanConnection() {
+                const appId = document.getElementById('inputLeanAppId').value.trim();
+                const appKey = document.getElementById('inputLeanAppKey').value.trim();
+                const server = document.getElementById('inputLeanServer').value.trim();
+                const s = document.getElementById('syncStatus');
+                s.textContent = '连接中...'; s.style.color = '#ff9800';
+                if (!connectLeanCloud(appId, appKey, server)) { s.textContent = '失败'; s.style.color = '#ef5350'; return; }
+                try { const q = new AV.Query('HabitSync'); await q.limit(1).find(); } catch (e) {}
+                s.textContent = '已连接'; s.style.color = '#66bb6a';
+                showToast('LeanCloud 连接成功！');
             }
 
-            /** 加入房间 */
             async function joinRoom(code) {
-                if (!supabaseClient) { showToast('请先连接 Supabase'); return; }
+                if (typeof AV === 'undefined') { showToast('请先连接 LeanCloud'); return; }
                 if (!code.trim()) { showToast('请输入房间码'); return; }
                 syncRoomCode = code.trim();
-                document.getElementById('syncStatus').textContent = `🏠 房间: ${syncRoomCode}`;
+                document.getElementById('syncStatus').textContent = '房间: ' + syncRoomCode;
                 document.getElementById('syncStatus').style.color = '#7e57c2';
                 appData.syncRoomCode = syncRoomCode;
-                // 推送当前数据
-                await pushMyData();
-                // 订阅房间变化
-                subscribeToRoom();
-                saveData();
-                showToast(`🏠 已加入房间「${syncRoomCode}」！`);
-            }
-
-            /** 推送我的数据到 Supabase */
-            async function pushMyData() {
-                if (!supabaseClient || !syncRoomCode) return;
-                const myCard = {
-                    room_code: syncRoomCode,
-                    user_name: appData.myName || '我',
-                    user_color: appData.myColor || '#ce93d8',
-                    habits_data: appData.habits.map(h => ({
-                        name: h.name, color: h.color, checkins: h.checkins,
-                        badges: h.badges, diaries: h.diaries,
-                    })),
-                    updated_at: new Date().toISOString(),
-                };
-                try {
-                    await supabaseClient.from('habit_friends').upsert(myCard, { onConflict: 'room_code,user_name' });
-                } catch (e) {
-                    console.warn('推送失败', e);
+                if (!appData.myName) {
+                    appData.myName = appData.deviceCode;
+                    appData.myColor = MACARON_COLORS[Math.floor(Math.random() * MACARON_COLORS.length)].value;
                 }
+                await pushMyData();
+                subscribeToRoom();
+                await loadRoomFriends();
+                saveData();
+                showToast('已加入 ' + syncRoomCode + '！好友可实时查看更新');
             }
 
-            /** 订阅房间内好友的实时更新 */
-            function subscribeToRoom() {
-                if (!supabaseClient || !syncRoomCode) return;
-                if (syncChannel) supabaseClient.removeChannel(syncChannel);
+            async function pushMyData() {
+                if (!syncRoomCode) return;
+                try {
+                    const q = new AV.Query('HabitSync');
+                    q.equalTo('roomCode', syncRoomCode);
+                    q.equalTo('userName', appData.myName || appData.deviceCode);
+                    const results = await q.find();
+                    let obj = results.length > 0 ? results[0] : new AV.Object('HabitSync');
+                    obj.set('roomCode', syncRoomCode);
+                    obj.set('userName', appData.myName || appData.deviceCode);
+                    obj.set('userColor', appData.myColor || '#ce93d8');
+                    obj.set('habitsData', appData.habits.map(h => ({ name: h.name, color: h.color, checkins: h.checkins })));
+                    await obj.save();
+                } catch (e) { console.warn('推送失败', e); }
+            }
 
-                syncChannel = supabaseClient
-                    .channel('room_' + syncRoomCode)
-                    .on('postgres_changes',
-                        { event: '*', schema: 'public', table: 'habit_friends', filter: `room_code=eq.${syncRoomCode}` },
-                        (payload) => {
-                            if (payload.new && payload.new.user_name !== (appData.myName || '我')) {
-                                // 收到好友数据更新
-                                updateFriendFromSync(payload.new);
-                            }
-                        }
-                    )
-                    .subscribe();
-                document.getElementById('syncStatus').textContent = `🟢 实时同步中 · 房间: ${syncRoomCode}`;
+            function subscribeToRoom() {
+                if (!syncRoomCode) return;
+                if (liveQuery) try { liveQuery.off(); } catch (e) {}
+                const q = new AV.Query('HabitSync');
+                q.equalTo('roomCode', syncRoomCode);
+                liveQuery = q.subscribe();
+                liveQuery.on('create', obj => handleSyncUpdate(obj));
+                liveQuery.on('update', obj => handleSyncUpdate(obj));
+                document.getElementById('syncStatus').textContent = '实时同步中 ' + syncRoomCode;
                 document.getElementById('syncStatus').style.color = '#66bb6a';
             }
 
-            /** 从同步数据更新好友 */
-            function updateFriendFromSync(data) {
-                if (!data || !data.user_name) return;
-                const existing = (appData.friends || []).findIndex(f => f.name === data.user_name);
+            function handleSyncUpdate(obj) {
+                const d = obj.attributes;
+                if (!d || !d.userName) return;
+                if (d.userName === (appData.myName || appData.deviceCode)) return;
                 const friend = {
-                    id: data.user_name,
-                    name: data.user_name,
-                    color: data.user_color,
-                    updatedAt: new Date(data.updated_at).getTime(),
-                    habits: (data.habits_data || []).map(h => ({
-                        name: h.name, color: h.color, checkins: h.checkins || [],
-                        badges: h.badges || [],
-                    })),
-                    live: true, // 标记为实时好友
+                    id: d.userName, name: d.userName, color: d.userColor || '#ce93d8',
+                    updatedAt: obj.updatedAt ? obj.updatedAt.getTime() : Date.now(),
+                    habits: (d.habitsData || []).map(h => ({ name: h.name, color: h.color, checkins: h.checkins || [] })),
+                    live: true,
                 };
-                if (existing >= 0) {
-                    appData.friends[existing] = friend;
-                } else {
-                    appData.friends.push(friend);
-                }
+                const idx = (appData.friends || []).findIndex(f => f.name === d.userName);
+                if (idx >= 0) appData.friends[idx] = friend; else appData.friends.push(friend);
                 saveData();
                 if (appData.viewMode === 'friends') renderAll();
             }
 
-            /** 首次加载房间内所有好友数据 */
             async function loadRoomFriends() {
-                if (!supabaseClient || !syncRoomCode) return;
+                if (!syncRoomCode) return;
                 try {
-                    const { data, error } = await supabaseClient
-                        .from('habit_friends')
-                        .select('*')
-                        .eq('room_code', syncRoomCode);
-                    if (data) {
-                        data.forEach(d => {
-                            if (d.user_name !== (appData.myName || '我')) {
-                                updateFriendFromSync(d);
-                            }
-                        });
-                    }
-                } catch (e) {
-                    console.warn('加载好友失败', e);
-                }
+                    const q = new AV.Query('HabitSync');
+                    q.equalTo('roomCode', syncRoomCode);
+                    (await q.find()).forEach(obj => handleSyncUpdate(obj));
+                } catch (e) { console.warn('加载失败', e); }
             }
 
-            /** 设置我的显示信息 */
             function setMyInfo() {
-                const name = prompt('你的昵称（好友可见）：', appData.myName || '我');
+                const name = prompt('你的昵称（好友可见）：', appData.myName || appData.deviceCode);
                 if (name) {
-                    appData.myName = name.trim() || '我';
+                    appData.myName = name.trim() || appData.deviceCode;
                     appData.myColor = MACARON_COLORS[Math.floor(Math.random() * MACARON_COLORS.length)].value;
                     saveData();
                     if (syncRoomCode) pushMyData();
                 }
             }
+
 
             // ==================== 🔢 设备专属好友码 ====================
 
