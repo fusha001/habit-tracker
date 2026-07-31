@@ -5120,6 +5120,46 @@
                 syncToFriend(friend.name);
             }
 
+            /** 请求好友更新数据（生成请求链接） */
+            function requestFriendUpdate(friend) {
+                const requestLink = location.origin + location.pathname +
+                    '?request_update=' + encodeURIComponent(appData.deviceCode);
+                if (confirm('📩 生成请求链接发给「' + friend.name + '」？\n\n好友点开链接后会自动弹出同步提示')) {
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(requestLink).then(() =>
+                            showToast('📋 请求链接已复制！发给好友'));
+                    } else {
+                        prompt('复制链接发给好友：', requestLink);
+                    }
+                }
+            }
+
+            /** 检查URL中是否有更新请求 */
+            function checkUpdateRequest() {
+                const params = new URLSearchParams(location.search);
+                const requester = params.get('request_update');
+                if (requester) {
+                    // 有人请求更新，自动生成同步链接
+                    setTimeout(() => {
+                        if (confirm('📩 「' + requester + '」请求查看你的最新打卡数据\n\n要点确定生成同步链接回复TA吗？')) {
+                            syncToFriend(requester);
+                        }
+                    }, 1000);
+                }
+            }
+
+            /** 页面聚焦时自动检查同步 */
+            let _lastSyncCheck = 0;
+            function autoSyncOnFocus() {
+                const now = Date.now();
+                if (now - _lastSyncCheck < 30000) return; // 30秒内不重复
+                _lastSyncCheck = now;
+                // 检查URL hash是否有新同步数据
+                if (location.hash.startsWith('#sync=')) {
+                    loadSyncFromHash();
+                }
+            }
+
             /** 从URL hash加载同步数据 */
             function loadSyncFromHash() {
                 const hash = location.hash;
@@ -5393,6 +5433,12 @@
                     syncBtn.textContent = '🔄';
                     syncBtn.title = '生成同步链接发给好友';
                     syncBtn.addEventListener('click', (e) => { e.stopPropagation(); syncFriendData(friend); });
+                    // 请求更新按钮
+                    const reqBtn = document.createElement('button');
+                    reqBtn.className = 'btn-tap w-6 h-6 rounded-full bg-blue-50 text-blue-400 text-xs flex items-center justify-center flex-shrink-0';
+                    reqBtn.textContent = '📩';
+                    reqBtn.title = '请求好友更新数据';
+                    reqBtn.addEventListener('click', (e) => { e.stopPropagation(); requestFriendUpdate(friend); });
                     const expandIcon = document.createElement('span');
                     expandIcon.className = 'text-xs text-purple-400 font-bold';
                     expandIcon.textContent = isExpanded ? '▲' : '▼';
@@ -5400,6 +5446,7 @@
                     delBtn.className = 'btn-tap w-6 h-6 rounded-full bg-red-50 text-red-400 text-xs flex items-center justify-center';
                     delBtn.textContent = '✕';
                     delBtn.addEventListener('click', (e) => { e.stopPropagation(); removeFriend(friend.id); });
+                    btnGroup.appendChild(reqBtn);
                     btnGroup.appendChild(syncBtn);
                     btnGroup.appendChild(expandIcon);
                     btnGroup.appendChild(delBtn);
@@ -5660,9 +5707,15 @@
                 }
                 // 检查URL中是否有好友码参数
                 checkFriendUrlParam();
+                checkUpdateRequest();
                 // 生成设备专属码
                 getDeviceCode();
                 initNotifications();
+                // 页面聚焦时自动检查同步
+                window.addEventListener('focus', autoSyncOnFocus);
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) autoSyncOnFocus();
+                });
                 // 应用已保存的主题
                 if (appData.activeTheme && appData.activeTheme !== 'default') {
                     applyTheme(appData.activeTheme);
