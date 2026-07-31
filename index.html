@@ -1273,6 +1273,7 @@
                 syncRoomCode: '',
                 myName: '',
                 myColor: '',
+                deviceCode: '',            // 设备专属好友码
             };
 
             /** 心情 emoji 选项列表（用于每日心情快速选择） */
@@ -1589,6 +1590,8 @@
                         appData.syncRoomCode = parsed.syncRoomCode || '';
                         appData.myName = parsed.myName || '';
                         appData.myColor = parsed.myColor || '';
+                        appData.deviceCode = parsed.deviceCode || '';
+                        appData.pendingFriends = parsed.pendingFriends || [];
                         // 迁移旧数据：确保每个习惯都有所有必要字段
                         let migrated = false;
                         appData.habits.forEach((h, i) => {
@@ -1635,6 +1638,8 @@
                         syncRoomCode: appData.syncRoomCode,
                         myName: appData.myName,
                         myColor: appData.myColor,
+                        deviceCode: appData.deviceCode,
+                        pendingFriends: appData.pendingFriends,
                     };
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
                 } catch (e) {
@@ -5038,6 +5043,66 @@
                 }
             }
 
+            // ==================== 🔢 设备专属好友码 ====================
+
+            /** 动物昵称池 */
+            const CODE_ANIMALS = ['灵狐','萌熊','小鹿','海豚','飞鹰','熊猫','猫咪','白兔','天鹅','蜂鸟','蓝鲸','松鼠','雪狼','蝴蝶','锦鲤','云雀'];
+
+            /** 生成设备专属好友码（首次自动生成，持久化保存） */
+            function getDeviceCode() {
+                if (appData.deviceCode) return appData.deviceCode;
+                const animal = CODE_ANIMALS[Math.floor(Math.random() * CODE_ANIMALS.length)];
+                const suffix = Math.random().toString(36).slice(2, 7).toUpperCase();
+                appData.deviceCode = animal + '-' + suffix;
+                saveData();
+                return appData.deviceCode;
+            }
+
+            /** 复制我的好友码 */
+            function copyDeviceCode() {
+                const code = getDeviceCode();
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(code).then(() => showToast('📋 好友码已复制！'));
+                } else {
+                    prompt('你的好友码：', code);
+                }
+            }
+
+            /** 通过好友码添加好友（生成专属分享链接） */
+            function addFriendByCode() {
+                const code = prompt('请输入好友的好友码：');
+                if (!code || !code.trim()) return;
+                // 用好友码生成一个标识性的分享链接
+                const link = location.origin + location.pathname + '?friend=' + encodeURIComponent(code.trim());
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(link).then(() => {
+                        showToast('🔗 已生成添加链接！发送给好友或让好友同样添加你的码');
+                    });
+                }
+                // 同时在本地添加一个待确认的好友占位
+                if (!appData.pendingFriends) appData.pendingFriends = [];
+                if (!appData.pendingFriends.includes(code.trim())) {
+                    appData.pendingFriends.push(code.trim());
+                    saveData();
+                }
+                showToast('📝 好友码已记录，等待好友也添加你');
+            }
+
+            /** 检查URL参数添加好友 */
+            function checkFriendUrlParam() {
+                const params = new URLSearchParams(location.search);
+                const friendCode = params.get('friend');
+                if (friendCode) {
+                    // 记录好友码
+                    if (!appData.pendingFriends) appData.pendingFriends = [];
+                    if (!appData.pendingFriends.includes(friendCode) && friendCode !== appData.deviceCode) {
+                        appData.pendingFriends.push(friendCode);
+                        saveData();
+                        showToast(`👥 收到好友邀请：${friendCode}`);
+                    }
+                }
+            }
+
             // ==================== 👥 好友系统 ====================
 
             /** 导出我的数据为好友卡片 */
@@ -5185,6 +5250,14 @@
                         e.target.value = ''; }
                 });
                 importLabel.appendChild(importInput);
+                // 输入好友码添加
+                const codeBtn = document.createElement('button');
+                codeBtn.className = 'btn-tap w-full py-3 rounded-2xl font-extrabold text-sm text-white mb-2';
+                codeBtn.style.background = 'linear-gradient(135deg, #ffb74d, #f57c00)';
+                codeBtn.textContent = '🔢 输入好友码添加';
+                codeBtn.addEventListener('click', addFriendByCode);
+
+                domHabitList.appendChild(codeBtn);
                 actionBar.appendChild(linkBtn);
                 const btnCol = document.createElement('div');
                 btnCol.className = 'flex flex-col gap-1.5 flex-1';
@@ -5194,10 +5267,26 @@
                 domHabitList.appendChild(actionBar);
 
                 // ---- 好友列表 ----
+                // ---- 我的专属好友码卡片 ----
+                const myCode = getDeviceCode();
+                const codeCard = document.createElement('div');
+                codeCard.className = 'card px-4 py-3 mb-3';
+                codeCard.style.background = 'linear-gradient(135deg, rgba(255,248,240,0.95), rgba(255,240,245,0.95))';
+                codeCard.innerHTML = `
+                    <p class="text-xs font-bold text-purple-500 mb-1">🔢 我的好友码</p>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl font-extrabold text-purple-700 tracking-wider">${myCode}</span>
+                        <button class="copy-code-btn btn-tap px-3 py-1.5 rounded-xl text-xs font-extrabold text-white flex-shrink-0" style="background:linear-gradient(135deg,#ce93d8,#ab47bc);">📋 复制</button>
+                    </div>
+                    <p class="text-xs text-purple-300 mt-1.5">把好友码发给朋友，让TA输入你的码添加你</p>
+                `;
+                codeCard.querySelector('.copy-code-btn').addEventListener('click', copyDeviceCode);
+                domHabitList.appendChild(codeCard);
+
                 if (!appData.friends || appData.friends.length === 0) {
                     const empty = document.createElement('div');
-                    empty.className = 'text-center py-12 text-purple-400 font-semibold text-sm';
-                    empty.innerHTML = '👥<br>还没有好友哦～<br><span class="text-xs text-purple-300">导出你的打卡数据分享给朋友<br>或导入朋友的打卡文件查看TA的进度</span>';
+                    empty.className = 'text-center py-6 text-purple-400 font-semibold text-sm';
+                    empty.innerHTML = '👥<br>还没有好友哦～<br><span class="text-xs text-purple-300">把你的好友码发给朋友<br>或点击下方按钮添加朋友的好友码</span>';
                     domHabitList.appendChild(empty);
                     return;
                 }
@@ -5439,6 +5528,10 @@
                 if (location.hash.startsWith('#friend=')) {
                     loadFriendFromHash();
                 }
+                // 检查URL中是否有好友码参数
+                checkFriendUrlParam();
+                // 生成设备专属码
+                getDeviceCode();
                 initNotifications();
                 // 应用已保存的主题
                 if (appData.activeTheme && appData.activeTheme !== 'default') {
