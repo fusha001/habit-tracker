@@ -949,18 +949,30 @@
         </button>
         <!-- Supabase 实时同步配置 -->
         <div class="border-t border-purple-100 pt-3 mt-3 mb-3">
-            <p class="text-xs font-bold text-purple-500 mb-2">☁️ 实时同步（Supabase 免费）</p>
-            <input id="inputSupabaseUrl" type="text" placeholder="Supabase URL"
+            <div class="flex items-center justify-between mb-2">
+                <p class="text-xs font-bold text-purple-500">☁️ 实时同步</p>
+                <span id="syncStatus" class="text-xs font-bold text-purple-300">⚪ 未连接</span>
+            </div>
+            <div class="bg-purple-50 rounded-xl p-2 mb-2 text-xs text-purple-400 leading-relaxed">
+                📌 <b>设置步骤</b>：<br>
+                1️⃣ <b>app.supabase.com</b> 邮箱注册<br>
+                2️⃣ 创建项目 → SQL Editor 粘贴建表语句<br>
+                3️⃣ Settings → API → 复制 URL 和 Key
+            </div>
+            <input id="inputSupabaseUrl" type="text" placeholder="Project URL（https://xxx.supabase.co）"
             class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
             <input id="inputSupabaseKey" type="text" placeholder="anon public key"
             class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
             <div class="flex gap-2 mb-1.5">
-                <input id="inputRoomCode" type="text" placeholder="房间码（好友共用）" maxlength="20"
+                <button id="btnConnectSupabase" class="btn-tap flex-1 py-2 rounded-xl text-xs font-extrabold text-white"
+                style="background:linear-gradient(135deg,#7e57c2,#5e35b1);">🔌 连接测试</button>
+            </div>
+            <div class="flex gap-2">
+                <input id="inputRoomCode" type="text" placeholder="好友房间码（如：study2024）" maxlength="20"
                 class="flex-1 bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none">
                 <button id="btnJoinRoom" class="btn-tap px-4 py-2 rounded-xl text-xs font-extrabold text-white flex-shrink-0"
-                style="background:linear-gradient(135deg,#66bb6a,#43a047);">加入</button>
+                style="background:linear-gradient(135deg,#66bb6a,#43a047);">加入房间</button>
             </div>
-            <p id="syncStatus" class="text-xs text-purple-300 font-semibold text-center">未连接</p>
         </div>
         <!-- 补签卡说明 -->
         <div class="text-xs text-purple-400 text-center mt-1 font-semibold">
@@ -3295,29 +3307,21 @@
 
             // ==================== ☁️ Supabase 实时同步事件 ====================
 
-            /** 连接 Supabase */
-            document.getElementById('syncStatus').addEventListener('click', () => {
-                const url = document.getElementById('inputSupabaseUrl').value.trim();
-                const key = document.getElementById('inputSupabaseKey').value.trim();
-                if (url && key) connectSupabase(url, key);
-            });
+            /** 连接测试 */
+            document.getElementById('btnConnectSupabase').addEventListener('click', testSupabaseConnection);
 
             /** 加入房间 */
             document.getElementById('btnJoinRoom').addEventListener('click', async () => {
                 if (!supabaseClient) {
-                    const url = document.getElementById('inputSupabaseUrl').value.trim();
-                    const key = document.getElementById('inputSupabaseKey').value.trim();
-                    if (!url || !key) { showToast('请先填写 Supabase URL 和 Key 并点击状态文字连接'); return; }
-                    connectSupabase(url, key);
-                    await new Promise(r => setTimeout(r, 500));
+                    await testSupabaseConnection();
+                    if (!supabaseClient) return;
                 }
                 if (!appData.myName) setMyInfo();
                 const code = document.getElementById('inputRoomCode').value.trim();
-                if (code) {
-                    await joinRoom(code);
-                    await loadRoomFriends();
-                    if (appData.viewMode === 'friends') renderAll();
-                }
+                if (!code) { showToast('请输入房间码'); return; }
+                await joinRoom(code);
+                await loadRoomFriends();
+                if (appData.viewMode === 'friends') renderAll();
             });
 
             /** 自动回填已保存的配置 */
@@ -4916,18 +4920,48 @@
             /** 初始化 Supabase 连接 */
             function connectSupabase(url, key) {
                 if (!url || !key) { showToast('请填写 Supabase URL 和 Key'); return; }
-                if (typeof window.supabase === 'undefined') { showToast('⚠️ Supabase SDK 加载失败，请检查网络'); return; }
+                if (typeof window.supabase === 'undefined') { showToast('⚠️ SDK 加载失败，请检查网络'); return; }
                 try {
                     supabaseClient = window.supabase.createClient(url, key);
-                    showToast('✅ Supabase 已连接！');
-                    document.getElementById('syncStatus').textContent = '✅ 已连接';
-                    document.getElementById('syncStatus').style.color = '#66bb6a';
-                    // 保存配置
                     appData.supabaseUrl = url;
                     appData.supabaseKey = key;
                     saveData();
+                    return supabaseClient;
                 } catch (e) {
-                    showToast('⚠️ 连接失败，请检查配置');
+                    showToast('⚠️ 连接失败，请检查 URL 和 Key');
+                    return null;
+                }
+            }
+
+            /** 测试 Supabase 连接 */
+            async function testSupabaseConnection() {
+                const url = document.getElementById('inputSupabaseUrl').value.trim();
+                const key = document.getElementById('inputSupabaseKey').value.trim();
+                const statusEl = document.getElementById('syncStatus');
+
+                statusEl.textContent = '🟡 连接中...';
+                statusEl.style.color = '#ff9800';
+
+                const client = connectSupabase(url, key);
+                if (!client) {
+                    statusEl.textContent = '🔴 连接失败';
+                    statusEl.style.color = '#ef5350';
+                    return;
+                }
+
+                try {
+                    // 测试读取
+                    const { error } = await client.from('habit_friends').select('id').limit(1);
+                    if (error && error.code !== 'PGRST116') {
+                        throw error;
+                    }
+                    statusEl.textContent = '🟢 已连接';
+                    statusEl.style.color = '#66bb6a';
+                    showToast('✅ Supabase 连接成功！');
+                } catch (e) {
+                    statusEl.textContent = '🟠 已连接，需建表';
+                    statusEl.style.color = '#ff9800';
+                    showToast('⚠️ 已连接，请在 Supabase SQL Editor 中执行建表语句');
                 }
             }
 
