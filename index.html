@@ -5073,12 +5073,10 @@
                 if (!code || !code.trim()) { showToast('请输入好友码'); return; }
                 code = code.trim();
                 if (code === appData.deviceCode) { showToast('不能添加自己哦～'); return; }
-                // 检查是否已存在
                 if ((appData.friends || []).find(f => f.name === code)) {
                     showToast('该好友已在列表中');
                     return;
                 }
-                // 添加为待确认好友（等对方也添加你时数据会同步）
                 const friendCard = {
                     id: 'code_' + code,
                     name: code,
@@ -5088,21 +5086,72 @@
                     pending: true,
                 };
                 appData.friends.push(friendCard);
-                // 也记录到 pending
-                if (!appData.pendingFriends) appData.pendingFriends = [];
-                if (!appData.pendingFriends.includes(code)) appData.pendingFriends.push(code);
-                // 生成我的分享链接方便回传给对方
-                const myLink = location.origin + location.pathname + '?friend=' + encodeURIComponent(appData.deviceCode);
                 saveData();
                 renderAll();
+                // 生成包含我的数据的同步链接
                 showToast(`👥 已添加好友「${code}」！`);
-                setTimeout(() => {
-                    if (confirm('要让好友也添加你吗？\n\n发送你的好友码给TA：' + appData.deviceCode + '\n\n点确定复制你的分享链接')) {
-                        if (navigator.clipboard) {
-                            navigator.clipboard.writeText(myLink).then(() => showToast('📋 你的分享链接已复制，发给好友吧！'));
-                        }
+                setTimeout(() => syncToFriend(code), 600);
+            }
+
+            /** 生成包含我全部数据的同步链接发给好友 */
+            function syncToFriend(friendCode) {
+                const myData = {
+                    code: appData.deviceCode,
+                    name: appData.myName || appData.deviceCode,
+                    color: appData.myColor || '#ce93d8',
+                    habits: appData.habits.map(h => ({
+                        name: h.name, color: h.color, checkins: h.checkins,
+                    })),
+                    time: Date.now(),
+                };
+                const encoded = btoa(encodeURIComponent(JSON.stringify(myData)));
+                const link = location.origin + location.pathname + '#sync=' + encoded;
+                if (confirm('📤 生成同步链接发给「' + friendCode + '」？\n\n好友打开链接即可同步你的最新数据')) {
+                    if (navigator.clipboard) {
+                        navigator.clipboard.writeText(link).then(() => showToast('📋 同步链接已复制！发给好友吧'));
+                    } else {
+                        prompt('复制以下链接发给好友：', link);
                     }
-                }, 500);
+                }
+            }
+
+            /** 好友卡片上的同步按钮 */
+            function syncFriendData(friend) {
+                syncToFriend(friend.name);
+            }
+
+            /** 从URL hash加载同步数据 */
+            function loadSyncFromHash() {
+                const hash = location.hash;
+                if (hash.startsWith('#sync=')) {
+                    try {
+                        const encoded = hash.slice(6);
+                        const data = JSON.parse(decodeURIComponent(atob(encoded)));
+                        if (!data.code || !data.habits) return;
+                        // 更新或添加该好友
+                        const existing = (appData.friends || []).findIndex(f => f.name === data.code);
+                        const friendCard = {
+                            id: 'code_' + data.code,
+                            name: data.code,
+                            color: data.color,
+                            habits: data.habits,
+                            updatedAt: data.time,
+                            pending: false,
+                        };
+                        if (existing >= 0) {
+                            appData.friends[existing] = friendCard;
+                            showToast(`🔄 好友「${data.code}」数据已同步！`);
+                        } else {
+                            appData.friends.push(friendCard);
+                            showToast(`👥 收到「${data.code}」的同步数据！`);
+                        }
+                        saveData();
+                        history.replaceState(null, '', location.pathname);
+                        renderAll();
+                    } catch (e) {
+                        console.warn('同步数据解析失败', e);
+                    }
+                }
             }
 
             /** 检查URL参数添加好友 */
@@ -5338,6 +5387,12 @@
                     // 右侧操作按钮
                     const btnGroup = document.createElement('div');
                     btnGroup.className = 'flex items-center gap-1 flex-shrink-0';
+                    // 同步按钮
+                    const syncBtn = document.createElement('button');
+                    syncBtn.className = 'btn-tap w-6 h-6 rounded-full bg-green-50 text-green-500 text-xs flex items-center justify-center flex-shrink-0';
+                    syncBtn.textContent = '🔄';
+                    syncBtn.title = '生成同步链接发给好友';
+                    syncBtn.addEventListener('click', (e) => { e.stopPropagation(); syncFriendData(friend); });
                     const expandIcon = document.createElement('span');
                     expandIcon.className = 'text-xs text-purple-400 font-bold';
                     expandIcon.textContent = isExpanded ? '▲' : '▼';
@@ -5345,6 +5400,7 @@
                     delBtn.className = 'btn-tap w-6 h-6 rounded-full bg-red-50 text-red-400 text-xs flex items-center justify-center';
                     delBtn.textContent = '✕';
                     delBtn.addEventListener('click', (e) => { e.stopPropagation(); removeFriend(friend.id); });
+                    btnGroup.appendChild(syncBtn);
                     btnGroup.appendChild(expandIcon);
                     btnGroup.appendChild(delBtn);
                     header.appendChild(nameArea);
@@ -5597,6 +5653,10 @@
                 // 检查URL中是否有好友分享链接
                 if (location.hash.startsWith('#friend=')) {
                     loadFriendFromHash();
+                }
+                // 检查URL中是否有同步数据
+                if (location.hash.startsWith('#sync=')) {
+                    loadSyncFromHash();
                 }
                 // 检查URL中是否有好友码参数
                 checkFriendUrlParam();
