@@ -8,12 +8,7 @@
     <!-- Tailwind CSS CDN：引入原子化 CSS 框架 -->
     <script src="https://cdn.tailwindcss.com">
     </script>
-
-    <!-- LeanCloud SDK：实时数据库同步 -->
-    <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4/dist/av-min.js">
-    </script>
-
-    <!-- 自定义 Tailwind 主题配置 -->
+<!-- 自定义 Tailwind 主题配置 -->
     <script>
         tailwind.config = {
             theme: {
@@ -947,34 +942,7 @@
         <button id="btnOpenAnniversary" class="btn-tap w-full py-3 rounded-2xl font-extrabold text-base text-pink-500 bg-pink-50 mb-3">
             💝 管理纪念日
         </button>
-        <!-- LeanCloud 实时同步配置 -->
-        <div class="border-t border-purple-100 pt-3 mt-3 mb-3">
-            <div class="flex items-center justify-between mb-2">
-                <p class="text-xs font-bold text-purple-500">☁️ 实时同步</p>
-                <span id="syncStatus" class="text-xs font-bold text-purple-300">⚪ 未连接</span>
-            </div>
-            <div class="bg-purple-50 rounded-xl p-2 mb-2 text-xs text-purple-400 leading-relaxed">
-                📌 <b>设置步骤</b>：<br>
-                1️⃣ <b>leancloud.cn</b> 邮箱注册<br>
-                2️⃣ 创建项目 → SQL Editor 粘贴建表语句<br>
-                3️⃣ Settings → API → 复制 URL 和 Key
-            </div>
-            <input id="inputLeanAppId" type="text" placeholder="AppID"
-            class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
-            <input id="inputLeanAppKey" type="text" placeholder="AppKey"
-<input id="inputLeanServer" type="text" placeholder="服务器地址（如 https://xxx.lc-cn-n1-shared.com）"
-            class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
-            class="w-full bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none mb-1.5">
-            <div class="flex gap-2 mb-1.5">
-                <button id="btnConnectLean" class="btn-tap flex-1 py-2 rounded-xl text-xs font-extrabold text-white"
-                style="background:linear-gradient(135deg,#7e57c2,#5e35b1);">🔌 连接测试</button>
-            </div>
-            <div class="flex gap-2">
-                <input id="inputRoomCode" type="text" placeholder="好友房间码（如：study2024）" maxlength="20"
-                class="flex-1 bg-purple-50 border border-purple-100 rounded-xl px-3 py-2 text-xs font-semibold text-purple-800 outline-none">
-                <button id="btnJoinRoom" class="btn-tap px-4 py-2 rounded-xl text-xs font-extrabold text-white flex-shrink-0"
-                style="background:linear-gradient(135deg,#66bb6a,#43a047);">加入房间</button>
-            </div>
+<p id="syncStatus" class="text-xs text-purple-300 font-semibold text-center">未连接</p>
         </div>
         <!-- 补签卡说明 -->
         <div class="text-xs text-purple-400 text-center mt-1 font-semibold">
@@ -1282,13 +1250,10 @@
                 anniversaries: [],          // 纪念日 [{id, name, date:'MM-DD', icon, type}]
                 todos: [],                  // 待办 [{id, text, date:'YYYY-MM-DD', done:false}]
                 friends: [],               // 好友 [{id, name, color, habits:[{name,color,checkins}]}]
-                leanAppId: '',           // LeanCloud AppID
-                leanAppKey: '',
                 syncRoomCode: '',
                 myName: '',
                 myColor: '',
-                leanServer: '',             // LeanCloud server
-deviceCode: '',            // 设备专属好友码
+                deviceCode: '',            // 设备专属好友码
             };
 
             /** 心情 emoji 选项列表（用于每日心情快速选择） */
@@ -1600,9 +1565,6 @@ deviceCode: '',            // 设备专属好友码
                         appData.anniversaries = parsed.anniversaries || [];
                         appData.todos = parsed.todos || [];
                         appData.friends = parsed.friends || [];
-                        appData.leanAppId = parsed.leanAppId || '';
-                        appData.leanAppKey = parsed.leanAppKey || '';
-                        appData.leanServer = parsed.leanServer || '';
                         appData.syncRoomCode = parsed.syncRoomCode || '';
                         appData.myName = parsed.myName || '';
                         appData.myColor = parsed.myColor || '';
@@ -1649,9 +1611,6 @@ deviceCode: '',            // 设备专属好友码
                         anniversaries: appData.anniversaries,
                         todos: appData.todos,
                         friends: appData.friends,
-                        leanAppId: appData.leanAppId,
-                        leanAppKey: appData.leanAppKey,
-                        leanServer: appData.leanServer,
                         syncRoomCode: appData.syncRoomCode,
                         myName: appData.myName,
                         myColor: appData.myColor,
@@ -2243,9 +2202,7 @@ deviceCode: '',            // 设备专属好友码
                     // 播放打卡音效
                     playCheckinSound();
                     saveData();
-                    // 推送到 LeanCloud 实时同步
-                    if (syncRoomCode) setTimeout(() => pushMyData(), 100);
-                    // 触发彩蛋（延迟执行不阻塞UI）
+                                        // 触发彩蛋（延迟执行不阻塞UI）
                     setTimeout(() => triggerEasterEggs(habit), 300);
                     return { action: 'checked', badge: newBadge };
                 }
@@ -3309,56 +3266,6 @@ deviceCode: '',            // 设备专属好友码
                 document.getElementById('modalAnniversary').classList.remove('hidden');
                 domSettingsPanel.classList.remove('open');
             });
-
-            // ==================== LeanCloud 实时同步事件 ====================
-
-            document.getElementById('btnConnectLean').addEventListener('click', testLeanConnection);
-
-            document.getElementById('btnJoinRoom').addEventListener('click', async () => {
-                if (typeof AV === 'undefined') {
-                    await testLeanConnection();
-                    if (typeof AV === 'undefined') return;
-                }
-                if (!appData.myName) setMyInfo();
-                const code = document.getElementById('inputRoomCode').value.trim();
-                if (!code) { showToast('请输入房间码'); return; }
-                await joinRoom(code);
-                await loadRoomFriends();
-                if (appData.viewMode === 'friends') renderAll();
-            });
-
-            if (appData.leanAppId) document.getElementById('inputLeanAppId').value = appData.leanAppId;
-            if (appData.leanAppKey) document.getElementById('inputLeanAppKey').value = appData.leanAppKey;
-            if (appData.leanServer) document.getElementById('inputLeanServer').value = appData.leanServer;
-            if (appData.syncRoomCode) document.getElementById('inputRoomCode').value = appData.syncRoomCode;
-
-            setTimeout(() => {
-                if (appData.leanAppId && appData.leanAppKey) {
-                    connectLeanCloud(appData.leanAppId, appData.leanAppKey, appData.leanServer);
-                    if (appData.syncRoomCode) {
-                        setTimeout(async () => {
-                            await joinRoom(appData.syncRoomCode);
-                            await loadRoomFriends();
-                        }, 1500);
-                    }
-                }
-            }, 2000);
-
-
-
-            // 自动连接（如果有保存的配置）
-            setTimeout(() => {
-                if (appData.leanAppId && appData.leanAppKey) {
-                    connectLeanCloud(appData.leanAppId, appData.leanAppKey, appData.leanServer);
-                    if (appData.syncRoomCode) {
-                        setTimeout(async () => {
-                            await joinRoom(appData.syncRoomCode);
-                            await loadRoomFriends();
-                        }, 1500);
-                    }
-                }
-            }, 2000);
-
             /** 纪念日弹窗：关闭 */
             document.getElementById('btnCloseAnniversary').addEventListener('click', () => {
                 document.getElementById('modalAnniversary').classList.add('hidden');
@@ -4928,118 +4835,6 @@ deviceCode: '',            // 设备专属好友码
                 return wrapper;
             };
 
-            // ==================== LeanCloud 实时同步（国内版）====================
-
-            let syncRoomCode = null;
-            let liveQuery = null;
-
-            function connectLeanCloud(appId, appKey, server) {
-                if (!appId || !appKey) { showToast('请填写 AppID 和 AppKey'); return null; }
-                if (typeof AV === 'undefined') { showToast('SDK 加载失败'); return null; }
-                try {
-                    AV.init({ appId, appKey, serverURL: server || undefined });
-                    appData.leanAppId = appId;
-                    appData.leanAppKey = appKey;
-                    appData.leanServer = server;
-                    saveData();
-                    return true;
-                } catch (e) { showToast('初始化失败'); return null; }
-            }
-
-            async function testLeanConnection() {
-                const appId = document.getElementById('inputLeanAppId').value.trim();
-                const appKey = document.getElementById('inputLeanAppKey').value.trim();
-                const server = document.getElementById('inputLeanServer').value.trim();
-                const s = document.getElementById('syncStatus');
-                s.textContent = '连接中...'; s.style.color = '#ff9800';
-                if (!connectLeanCloud(appId, appKey, server)) { s.textContent = '失败'; s.style.color = '#ef5350'; return; }
-                try { const q = new AV.Query('HabitSync'); await q.limit(1).find(); } catch (e) {}
-                s.textContent = '已连接'; s.style.color = '#66bb6a';
-                showToast('LeanCloud 连接成功！');
-            }
-
-            async function joinRoom(code) {
-                if (typeof AV === 'undefined') { showToast('请先连接 LeanCloud'); return; }
-                if (!code.trim()) { showToast('请输入房间码'); return; }
-                syncRoomCode = code.trim();
-                document.getElementById('syncStatus').textContent = '房间: ' + syncRoomCode;
-                document.getElementById('syncStatus').style.color = '#7e57c2';
-                appData.syncRoomCode = syncRoomCode;
-                if (!appData.myName) {
-                    appData.myName = appData.deviceCode;
-                    appData.myColor = MACARON_COLORS[Math.floor(Math.random() * MACARON_COLORS.length)].value;
-                }
-                await pushMyData();
-                subscribeToRoom();
-                await loadRoomFriends();
-                saveData();
-                showToast('已加入 ' + syncRoomCode + '！好友可实时查看更新');
-            }
-
-            async function pushMyData() {
-                if (!syncRoomCode) return;
-                try {
-                    const q = new AV.Query('HabitSync');
-                    q.equalTo('roomCode', syncRoomCode);
-                    q.equalTo('userName', appData.myName || appData.deviceCode);
-                    const results = await q.find();
-                    let obj = results.length > 0 ? results[0] : new AV.Object('HabitSync');
-                    obj.set('roomCode', syncRoomCode);
-                    obj.set('userName', appData.myName || appData.deviceCode);
-                    obj.set('userColor', appData.myColor || '#ce93d8');
-                    obj.set('habitsData', appData.habits.map(h => ({ name: h.name, color: h.color, checkins: h.checkins })));
-                    await obj.save();
-                } catch (e) { console.warn('推送失败', e); }
-            }
-
-            function subscribeToRoom() {
-                if (!syncRoomCode) return;
-                if (liveQuery) try { liveQuery.off(); } catch (e) {}
-                const q = new AV.Query('HabitSync');
-                q.equalTo('roomCode', syncRoomCode);
-                liveQuery = q.subscribe();
-                liveQuery.on('create', obj => handleSyncUpdate(obj));
-                liveQuery.on('update', obj => handleSyncUpdate(obj));
-                document.getElementById('syncStatus').textContent = '实时同步中 ' + syncRoomCode;
-                document.getElementById('syncStatus').style.color = '#66bb6a';
-            }
-
-            function handleSyncUpdate(obj) {
-                const d = obj.attributes;
-                if (!d || !d.userName) return;
-                if (d.userName === (appData.myName || appData.deviceCode)) return;
-                const friend = {
-                    id: d.userName, name: d.userName, color: d.userColor || '#ce93d8',
-                    updatedAt: obj.updatedAt ? obj.updatedAt.getTime() : Date.now(),
-                    habits: (d.habitsData || []).map(h => ({ name: h.name, color: h.color, checkins: h.checkins || [] })),
-                    live: true,
-                };
-                const idx = (appData.friends || []).findIndex(f => f.name === d.userName);
-                if (idx >= 0) appData.friends[idx] = friend; else appData.friends.push(friend);
-                saveData();
-                if (appData.viewMode === 'friends') renderAll();
-            }
-
-            async function loadRoomFriends() {
-                if (!syncRoomCode) return;
-                try {
-                    const q = new AV.Query('HabitSync');
-                    q.equalTo('roomCode', syncRoomCode);
-                    (await q.find()).forEach(obj => handleSyncUpdate(obj));
-                } catch (e) { console.warn('加载失败', e); }
-            }
-
-            function setMyInfo() {
-                const name = prompt('你的昵称（好友可见）：', appData.myName || appData.deviceCode);
-                if (name) {
-                    appData.myName = name.trim() || appData.deviceCode;
-                    appData.myColor = MACARON_COLORS[Math.floor(Math.random() * MACARON_COLORS.length)].value;
-                    saveData();
-                    if (syncRoomCode) pushMyData();
-                }
-            }
-
-
             // ==================== 🔢 设备专属好友码 ====================
 
             /** 动物昵称池 */
@@ -5115,46 +4910,6 @@ deviceCode: '',            // 设备专属好友码
             /** 好友卡片上的同步按钮 */
             function syncFriendData(friend) {
                 syncToFriend(friend.name);
-            }
-
-            /** 请求好友更新数据（生成请求链接） */
-            function requestFriendUpdate(friend) {
-                const requestLink = location.origin + location.pathname +
-                    '?request_update=' + encodeURIComponent(appData.deviceCode);
-                if (confirm('📩 生成请求链接发给「' + friend.name + '」？\n\n好友点开链接后会自动弹出同步提示')) {
-                    if (navigator.clipboard) {
-                        navigator.clipboard.writeText(requestLink).then(() =>
-                            showToast('📋 请求链接已复制！发给好友'));
-                    } else {
-                        prompt('复制链接发给好友：', requestLink);
-                    }
-                }
-            }
-
-            /** 检查URL中是否有更新请求 */
-            function checkUpdateRequest() {
-                const params = new URLSearchParams(location.search);
-                const requester = params.get('request_update');
-                if (requester) {
-                    // 有人请求更新，自动生成同步链接
-                    setTimeout(() => {
-                        if (confirm('📩 「' + requester + '」请求查看你的最新打卡数据\n\n要点确定生成同步链接回复TA吗？')) {
-                            syncToFriend(requester);
-                        }
-                    }, 1000);
-                }
-            }
-
-            /** 页面聚焦时自动检查同步 */
-            let _lastSyncCheck = 0;
-            function autoSyncOnFocus() {
-                const now = Date.now();
-                if (now - _lastSyncCheck < 30000) return; // 30秒内不重复
-                _lastSyncCheck = now;
-                // 检查URL hash是否有新同步数据
-                if (location.hash.startsWith('#sync=')) {
-                    loadSyncFromHash();
-                }
             }
 
             /** 从URL hash加载同步数据 */
@@ -5430,12 +5185,6 @@ deviceCode: '',            // 设备专属好友码
                     syncBtn.textContent = '🔄';
                     syncBtn.title = '生成同步链接发给好友';
                     syncBtn.addEventListener('click', (e) => { e.stopPropagation(); syncFriendData(friend); });
-                    // 请求更新按钮
-                    const reqBtn = document.createElement('button');
-                    reqBtn.className = 'btn-tap w-6 h-6 rounded-full bg-blue-50 text-blue-400 text-xs flex items-center justify-center flex-shrink-0';
-                    reqBtn.textContent = '📩';
-                    reqBtn.title = '请求好友更新数据';
-                    reqBtn.addEventListener('click', (e) => { e.stopPropagation(); requestFriendUpdate(friend); });
                     const expandIcon = document.createElement('span');
                     expandIcon.className = 'text-xs text-purple-400 font-bold';
                     expandIcon.textContent = isExpanded ? '▲' : '▼';
@@ -5443,7 +5192,6 @@ deviceCode: '',            // 设备专属好友码
                     delBtn.className = 'btn-tap w-6 h-6 rounded-full bg-red-50 text-red-400 text-xs flex items-center justify-center';
                     delBtn.textContent = '✕';
                     delBtn.addEventListener('click', (e) => { e.stopPropagation(); removeFriend(friend.id); });
-                    btnGroup.appendChild(reqBtn);
                     btnGroup.appendChild(syncBtn);
                     btnGroup.appendChild(expandIcon);
                     btnGroup.appendChild(delBtn);
@@ -5704,15 +5452,9 @@ deviceCode: '',            // 设备专属好友码
                 }
                 // 检查URL中是否有好友码参数
                 checkFriendUrlParam();
-                checkUpdateRequest();
                 // 生成设备专属码
                 getDeviceCode();
                 initNotifications();
-                // 页面聚焦时自动检查同步
-                window.addEventListener('focus', autoSyncOnFocus);
-                document.addEventListener('visibilitychange', () => {
-                    if (!document.hidden) autoSyncOnFocus();
-                });
                 // 应用已保存的主题
                 if (appData.activeTheme && appData.activeTheme !== 'default') {
                     applyTheme(appData.activeTheme);
