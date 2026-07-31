@@ -5291,74 +5291,135 @@
                     return;
                 }
 
+                // 追踪展开状态
+                if (!appData._expandedFriendId) appData._expandedFriendId = null;
+
                 (appData.friends || []).forEach(friend => {
+                    const isExpanded = appData._expandedFriendId === friend.id;
                     const card = document.createElement('div');
                     card.className = 'friend-card mb-3';
+                    card.style.cursor = 'pointer';
 
-                    // 好友头部
+                    // 好友头部（点击展开/折叠）
                     const header = document.createElement('div');
-                    header.className = 'flex items-center justify-between mb-2';
+                    header.className = 'flex items-center justify-between';
                     const nameArea = document.createElement('div');
-                    nameArea.className = 'flex items-center gap-2';
+                    nameArea.className = 'flex items-center gap-2 flex-1 min-w-0';
                     const dot = document.createElement('span');
                     dot.className = 'friend-streak-dot';
                     dot.style.background = friend.color;
                     const name = document.createElement('span');
                     name.className = 'font-extrabold text-base text-purple-800';
                     name.textContent = friend.name;
+                    // 实时同步标记
+                    if (friend.live) {
+                        const liveDot = document.createElement('span');
+                        liveDot.className = 'w-2 h-2 rounded-full flex-shrink-0';
+                        liveDot.style.background = '#4caf50';
+                        liveDot.style.boxShadow = '0 0 6px rgba(76,175,80,0.6)';
+                        liveDot.title = '实时同步中';
+                        nameArea.appendChild(liveDot);
+                    }
                     const habitCount = document.createElement('span');
                     habitCount.className = 'text-xs text-purple-400 font-semibold';
                     habitCount.textContent = `${friend.habits.length}个习惯`;
                     nameArea.appendChild(dot);
                     nameArea.appendChild(name);
                     nameArea.appendChild(habitCount);
-                    // 更新时间
-                    const updateTime = friend.updatedAt ? new Date(friend.updatedAt) : null;
-                    const timeSpan = document.createElement('span');
-                    timeSpan.className = 'text-xs text-purple-300 font-semibold';
-                    if (updateTime) {
-                        const diff = Math.floor((Date.now() - updateTime) / 3600000);
-                        timeSpan.textContent = diff < 1 ? '刚刚更新' : diff < 24 ? diff + '小时前' : Math.floor(diff/24) + '天前';
-                    }
-                    const refreshBtn = document.createElement('button');
-                    refreshBtn.className = 'btn-tap px-2 py-1 rounded-lg text-xs font-bold text-purple-500 bg-purple-50';
-                    refreshBtn.textContent = '🔄';
-                    refreshBtn.title = '刷新好友数据（重新导入文件）';
-                    refreshBtn.addEventListener('click', (e) => { e.stopPropagation(); refreshFriend(); });
-
+                    // 右侧操作按钮
                     const btnGroup = document.createElement('div');
-                    btnGroup.className = 'flex items-center gap-1';
-                    btnGroup.appendChild(timeSpan);
-                    btnGroup.appendChild(refreshBtn);
-
+                    btnGroup.className = 'flex items-center gap-1 flex-shrink-0';
+                    const expandIcon = document.createElement('span');
+                    expandIcon.className = 'text-xs text-purple-400 font-bold';
+                    expandIcon.textContent = isExpanded ? '▲' : '▼';
                     const delBtn = document.createElement('button');
                     delBtn.className = 'btn-tap w-6 h-6 rounded-full bg-red-50 text-red-400 text-xs flex items-center justify-center';
                     delBtn.textContent = '✕';
-                    delBtn.addEventListener('click', () => removeFriend(friend.id));
+                    delBtn.addEventListener('click', (e) => { e.stopPropagation(); removeFriend(friend.id); });
+                    btnGroup.appendChild(expandIcon);
                     btnGroup.appendChild(delBtn);
                     header.appendChild(nameArea);
                     header.appendChild(btnGroup);
+
+                    // 点击卡片展开/折叠
                     card.appendChild(header);
 
-                    // 好友习惯列表
-                    friend.habits.forEach(h => {
-                        const row = document.createElement('div');
-                        row.className = 'friend-habit-row';
-                        const hDot = document.createElement('span');
-                        hDot.className = 'friend-streak-dot';
-                        hDot.style.background = h.color;
-                        const hName = document.createElement('span');
-                        hName.className = 'text-sm font-semibold text-purple-700 flex-1';
-                        hName.textContent = h.name;
-                        const streak = calcStreak(h.checkins);
-                        const total = h.checkins ? h.checkins.length : 0;
-                        const stats = document.createElement('span');
-                        stats.className = 'text-xs font-bold text-purple-400';
-                        stats.textContent = `🔥${streak}天 · ✅${total}次`;
-                        row.appendChild(hDot);
-                        row.appendChild(hName);
-                        row.appendChild(stats);
-                        card.appendChild(row);
+                    // 快捷摘要行
+                    const summary = document.createElement('div');
+                    summary.className = 'flex items-center gap-3 px-1 mt-1.5 text-xs font-semibold text-purple-400';
+                    const maxStreak = Math.max(...friend.habits.map(h => calcStreak(h.checkins || [])), 0);
+                    const totalCheckins = friend.habits.reduce((s, h) => s + (h.checkins ? h.checkins.length : 0), 0);
+                    summary.innerHTML = `最高🔥${maxStreak}天 · 总计✅${totalCheckins}次`;
+                    card.appendChild(summary);
+
+                    // 展开区域：显示每个习惯的详细状态 + 迷你日历
+                    if (isExpanded) {
+                        const detailArea = document.createElement('div');
+                        detailArea.className = 'mt-3 pt-3 border-t border-purple-100';
+
+                        friend.habits.forEach(h => {
+                            const habitBlock = document.createElement('div');
+                            habitBlock.className = 'mb-3 last:mb-0 p-3 rounded-2xl';
+                            habitBlock.style.background = 'rgba(255,255,255,0.6)';
+
+                            // 习惯名称行
+                            const habitHeader = document.createElement('div');
+                            habitHeader.className = 'flex items-center gap-2 mb-2';
+                            const hDot2 = document.createElement('span');
+                            hDot2.style.cssText = `width:10px;height:10px;border-radius:50%;background:${h.color};flex-shrink:0;`;
+                            const hName2 = document.createElement('span');
+                            hName2.className = 'text-sm font-extrabold text-purple-800 flex-1';
+                            hName2.textContent = h.name;
+                            const streak = calcStreak(h.checkins || []);
+                            const total = h.checkins ? h.checkins.length : 0;
+                            const hStats = document.createElement('span');
+                            hStats.className = 'text-xs font-bold';
+                            hStats.style.color = h.color;
+                            hStats.textContent = `🔥${streak}天 ✅${total}次`;
+                            habitHeader.appendChild(hDot2);
+                            habitHeader.appendChild(hName2);
+                            habitHeader.appendChild(hStats);
+                            habitBlock.appendChild(habitHeader);
+
+                            // 迷你月历（当月7列网格）
+                            const today = new Date();
+                            const daysInMon = daysInMonth(today.getFullYear(), today.getMonth());
+                            const startOff = firstDayOfMonth(today.getFullYear(), today.getMonth());
+                            const miniGrid = document.createElement('div');
+                            miniGrid.className = 'grid grid-cols-7 gap-0.5 text-center';
+                            const checkinSet = new Set(h.checkins || []);
+                            for (let i = 0; i < startOff; i++) {
+                                const e = document.createElement('div'); miniGrid.appendChild(e);
+                            }
+                            for (let d = 1; d <= daysInMon; d++) {
+                                const ds = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                                const checked = checkinSet.has(ds);
+                                const cell = document.createElement('div');
+                                cell.style.cssText = `width:100%;aspect-ratio:1;border-radius:4px;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;`;
+                                cell.textContent = d;
+                                if (checked) {
+                                    cell.style.background = h.color;
+                                    cell.style.color = '#fff';
+                                } else if (ds === formatDate(today)) {
+                                    cell.style.border = '1.5px dashed #ce93d8';
+                                    cell.style.color = '#7e57c2';
+                                } else {
+                                    cell.style.background = '#f5f0fa';
+                                    cell.style.color = '#ccc';
+                                }
+                                miniGrid.appendChild(cell);
+                            }
+                            habitBlock.appendChild(miniGrid);
+                            detailArea.appendChild(habitBlock);
+                        });
+                        card.appendChild(detailArea);
+                    }
+
+                    // 整张卡片点击切换展开
+                    card.addEventListener('click', (e) => {
+                        if (e.target.closest('button')) return;
+                        appData._expandedFriendId = isExpanded ? null : friend.id;
+                        renderAll();
                     });
 
                     domHabitList.appendChild(card);
